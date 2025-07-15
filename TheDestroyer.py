@@ -130,33 +130,65 @@ class PokerBot(multiprocessing.Process):
 
 
 class PokerProbabilities():
-    cardsLeft = Deck()
+    cardsLeft = Deck().cards
+    totalCards = 7
+    currCards = []
 
-    def update_cards_left(self, hand, board):
-        d = Deck().cards
-        for c in hand+board:
+    def nCr(self, NR):
+        n, r = NR
+        sum = 1
+
+        # Calculate the value of n choose r 
+        # using the binomial coefficient formula
+        for i in range(1, r+1):
+            sum = sum * (n - r + i) // i
+    
+        return sum
+
+    def evalucate_choice(self, choices, toDraw):
+        probability = math.prod(list(map(self.nCr, choices))) / (self.nCr((len(self.cardsLeft), toDraw))) 
+
+        return probability
+        
+
+
+    def reset_deck(self):
+        self.cardsLeft = Deck().cards
+
+    def add_to_hand(self, toAdd):
+        d = self.cardsLeft
+        for c in toAdd:
             d.remove(c)
 
         self.cardsLeft = d
 
-    def flush_odds(self, hand, board):
-            all_cards = hand + board
-            suits = [card.suit for card in all_cards]
+        self.currCards = toAdd
+
+
+    def flush_odds(self):
+            suits = [card.suit for card in self.currCards]
             suit_counts = Counter(suits)
+            # print('my suit coutns', suit_counts)
+
+            cardsLeft = self.totalCards - len(self.currCards)
 
             deck_suits = [card.suit for card in self.cardsLeft]
             deck_suit_counts = Counter(deck_suits)
+            # print('deck suit counts', deck_suit_counts)
 
-            max_chance = 0
+            chance = 0
 
             for suit, count in suit_counts.items():
                 if count == 5:
                     return 1
-                # estimated chances of getting needed cards
-                chanceOfNone = (len(self.cardsLeft) - deck_suit_counts[suit]) / len(self.cardsLeft)
-                chance = math.factorial(chanceOfNone) / math.factorial(chanceOfNone - (5 - count))
-                if chance > max_chance:
-                    max_chance = chance
+                elif (cardsLeft - (5 - count)) < 0:
+                    continue
+
+                
+
+                chance += self.evalucate_choice([(deck_suit_counts[suit], (5 - count))], cardsLeft)
+                
+
             return chance
 
     def straight_odds(self, hand, board):
@@ -227,22 +259,41 @@ class PokerProbabilities():
         return 1 - ((1 - odd) ** self.cardsLeft)
 
 def test():
-    deck = Deck()
-    deck.shuffle()
+    
 
     probs = PokerProbabilities()
 
+    chance = 1
+    while (chance != 0):
+        deck = Deck()
+        deck.shuffle()
+
+        probs.reset_deck()
+
+        hand = deck.deal(2)
+        board = deck.deal(3)
+
+        probs.add_to_hand(hand + board)
+
+        chance = probs.flush_odds()
+
+    print(hand+ board)
 
 
 
-    hand = deck.deal(48)
-    board = deck.deal(2)
-
-    print(hand + board)
+    # hand = deck.deal(2)
+    # board = deck.deal(3)
     
-    probs.update_cards_left(hand, board)
 
-    print(probs.cardsLeft)
+    # probs.remove_from_deck(hand + board)
+    # print(probs.currCards)
+    # # print(probs.cardsLeft)
+    # print(probs.flush_odds())
+    # # print(probs.nCr((3, 2)))
+    # print(probs.nCr((9, 1)))
+    # print(probs.nCr((10, 2)))
+    # print(probs.evalucate_choice([(9, 1)], 2))
+    # print(probs.evalucate_choice([(10, 2)], 2))
     
 
 
