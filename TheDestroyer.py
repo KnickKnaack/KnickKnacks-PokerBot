@@ -130,8 +130,9 @@ class PokerBot(multiprocessing.Process):
 
 
 class PokerProbabilities():
-    cardsLeft = Deck().cards
-    totalCards = 7
+    cardsInDeck = Deck().cards
+    TOTAL_GAME_CARDS = 7
+    leftToDraw = TOTAL_GAME_CARDS
     currCards = []
 
     def nCr(self, NR):
@@ -145,51 +146,56 @@ class PokerProbabilities():
     
         return sum
 
-    def evalucate_choice(self, choices, toDraw):
-        probability = math.prod(list(map(self.nCr, choices))) / (self.nCr((len(self.cardsLeft), toDraw))) 
+    def evaluate_combinations(self, choices):
+        probability = math.prod(list(map(self.nCr, choices))) / (self.nCr((len(self.cardsInDeck), self.leftToDraw))) 
 
         return probability
         
 
 
     def reset_deck(self):
-        self.cardsLeft = Deck().cards
+        self.cardsInDeck = Deck().cards
+        self.leftToDraw = self.TOTAL_GAME_CARDS
+        self.currCards = []
 
     def add_to_hand(self, toAdd):
-        d = self.cardsLeft
+        d = self.cardsInDeck
         for c in toAdd:
             d.remove(c)
 
-        self.cardsLeft = d
+        self.currCards += toAdd
 
-        self.currCards = toAdd
+        self.leftToDraw = self.leftToDraw - len(toAdd)
 
 
     def flush_odds(self):
-            suits = [card.suit for card in self.currCards]
-            suit_counts = Counter(suits)
-            # print('my suit coutns', suit_counts)
+        suits = [card.suit for card in self.currCards]
+        suit_counts = Counter(suits)
+        print('my suit coutns', suit_counts)
 
-            cardsLeft = self.totalCards - len(self.currCards)
+        
 
-            deck_suits = [card.suit for card in self.cardsLeft]
-            deck_suit_counts = Counter(deck_suits)
-            # print('deck suit counts', deck_suit_counts)
+        deck_suits = [card.suit for card in self.cardsInDeck]
+        deck_suit_counts = Counter(deck_suits)
+        print('deck suit counts', deck_suit_counts)
 
-            chance = 0
+        chance = 0
 
-            for suit, count in suit_counts.items():
-                if count == 5:
-                    return 1
-                elif (cardsLeft - (5 - count)) < 0:
-                    continue
 
-                
+        
+        for suit, count in suit_counts.items():
+            excess = self.leftToDraw - (5 - count)
+            if count == 5:
+                return 1
+            elif (excess) < 0:
+                continue
 
-                chance += self.evalucate_choice([(deck_suit_counts[suit], (5 - count))], cardsLeft)
-                
+            combinations = [(deck_suit_counts[suit], (5 - count)), (len(self.cardsInDeck) - deck_suit_counts[suit], excess)]
+            print(combinations)
+            chance = max(chance, self.evaluate_combinations(combinations)) 
+            
 
-            return chance
+        return chance
 
     def straight_odds(self, hand, board):
         all_cards = hand + board
@@ -203,7 +209,7 @@ class PokerProbabilities():
         ranks = [card.rank for card in all_cards]
         rank_counts = Counter(ranks)
 
-        deck_ranks = [card.rank for card in self.cardsLeft]
+        deck_ranks = [card.rank for card in self.cardsInDeck]
         deck_rank_counts = Counter(deck_ranks)
 
         for rank, count in rank_counts.items():
@@ -217,7 +223,7 @@ class PokerProbabilities():
         ranks = [card.rank for card in all_cards]
         rank_counts = Counter(ranks)
 
-        deck_ranks = [card.rank for card in self.cardsLeft]
+        deck_ranks = [card.rank for card in self.cardsInDeck]
         deck_rank_counts = Counter(deck_ranks)
 
         max_rank = []
@@ -233,7 +239,7 @@ class PokerProbabilities():
         odd = 0
         for rank in max_rank:
             odd += (deck_rank_counts[rank] / len(self.deck_left)) ** (3 - max_count)
-        return 1 - ((1 - odd) ** self.cardsLeft)
+        return 1 - ((1 - odd) ** self.cardsInDeck)
 
     def quad_odds(self, hand, board):
         all_cards = hand + board
@@ -255,41 +261,45 @@ class PokerProbabilities():
                 max_rank.append(rank)
         odd = 0
         for rank in max_rank:
-            odd += (deck_rank_counts[rank] / len(self.cardsLeft)) ** (4 - max_count)
-        return 1 - ((1 - odd) ** self.cardsLeft)
+            odd += (deck_rank_counts[rank] / len(self.cardsInDeck)) ** (4 - max_count)
+        return 1 - ((1 - odd) ** self.cardsInDeck)
 
 def test():
     
 
     probs = PokerProbabilities()
 
-    chance = 1
-    while (chance != 0):
-        deck = Deck()
-        deck.shuffle()
+    # chance = 1
+    # while (chance != 0):
+    #     deck = Deck()
+    #     deck.shuffle()
 
-        probs.reset_deck()
+    #     probs.reset_deck()
 
-        hand = deck.deal(2)
-        board = deck.deal(3)
+    #     hand = deck.deal(2)
+    #     board = deck.deal(3)
 
-        probs.add_to_hand(hand + board)
+    #     probs.add_to_hand(hand + board)
 
-        chance = probs.flush_odds()
+    #     chance = probs.flush_odds()
 
-    print(hand+ board)
+    # print(hand+ board)
 
 
-
-    # hand = deck.deal(2)
-    # board = deck.deal(3)
+    deck = Deck()
+    deck.shuffle()
+    hand = deck.deal(2)
+    board = deck.deal(3)
     
+    hand = [Card('Hearts', '4'), Card('Hearts', '5'), Card('Hearts', '6'), Card('Hearts', '7'),Card('Spades', '4')]
+    board = []
 
-    # probs.remove_from_deck(hand + board)
-    # print(probs.currCards)
-    # # print(probs.cardsLeft)
-    # print(probs.flush_odds())
-    # # print(probs.nCr((3, 2)))
+    probs.add_to_hand(hand + board)
+    print(probs.currCards)
+    # print(probs.cardsInDeck)
+    print(probs.flush_odds())
+    
+    print(1 - (38*37)/(47*46))
     # print(probs.nCr((9, 1)))
     # print(probs.nCr((10, 2)))
     # print(probs.evalucate_choice([(9, 1)], 2))
