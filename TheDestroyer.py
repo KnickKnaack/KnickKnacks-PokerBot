@@ -137,7 +137,7 @@ class PokerProbabilities():
 
     cardsInDeck = Deck().cards
     leftToDraw = TOTAL_GAME_CARDS
-    currCards = []
+    currCards: list[Card] = [] 
 
 
     def nCr(self, NR):
@@ -221,6 +221,71 @@ class PokerProbabilities():
             
 
         return chance
+    
+
+    def flush_odds(self):
+
+        suits = [card.suit for card in self.currCards]
+        suit_counts = Counter(suits)
+
+
+        for suit in Card.SUIT_MAP.values():
+            if suit not in suit_counts:
+                suit_counts[suit] = 0
+
+
+        deck_suits = [card.suit for card in self.cardsInDeck]
+        deck_suit_counts = Counter(deck_suits)
+
+        chance = 0
+
+
+        for suit, count in suit_counts.items():
+            cardsNeeded = (self.FLUSH_CARDS_NEEDED - count)
+            excess = self.leftToDraw - cardsNeeded
+            if count == self.FLUSH_CARDS_NEEDED:
+                return 1
+            elif (excess) < 0:
+                continue
+
+            #NOTE: The probabiliy of each suit is independant of eachother. (this may cause a slightly lower chance than actual in high-card cases)
+            #   -ex: with 17 cards, a flush is gaurented
+            # need to differentiate when you pick different amounts of the suit at hand
+            #TODO: Flip this to inverse of the probabillity of not getting enough cards. (I think is more efficient?) (maybe do that for anything more than the minimum)
+            combinations = [[(deck_suit_counts[suit], cardsNeeded + i), (len(self.cardsInDeck) - deck_suit_counts[suit], excess - i)] for i in range(excess + 1)]
+            print(combinations)
+            # chance = max(chance, self.evaluate_combinations(combinations))
+            chance += self.evaluate_combinations(combinations)
+            
+
+        return chance
+    
+
+    def pair_odds(self):
+        rank_counts = dict.setdefault(Card.RANK_MAP.keys(), 0)
+        
+        num_pairs = 0
+
+        single_cards = {}
+
+        for card in self.currCards: 
+            
+
+            rank_counts[card.rank] += 1
+            if rank_counts[card.rank] == 2:
+                num_pairs += 1
+                if num_pairs == 2:
+                    return 0
+            elif rank_counts[card.rank] > 2:
+                return 0
+        
+
+
+        for rank, count in rank_counts.items():
+            pass
+
+
+        return 
 
 
 
@@ -290,7 +355,7 @@ def test():
     # print(type([(1, 2), (3, 4)][0]))
     # print(type([[(1, 2), (3, 4)],[(1, 2), (3, 4)]][0]))
     
-    hand = [Card('Hearts', '4'), Card('Hearts', '5'), Card('Hearts', '6'), Card('Hearts', '7'),Card('Spades', '4')]
+    hand = [Card('Hearts', '4'), Card('Hearts', '5'), Card('Hearts', '6'), Card('Hearts', '7'), Card('Spades', '4')]
     # hand = [Card('Hearts', '4'), Card('Hearts', '5'), Card('Hearts', '6'), Card('Clubs', '7'),Card('Spades', '4')]
     # hand = []
     board = []
