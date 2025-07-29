@@ -16,7 +16,10 @@ from board import (
     FoldAction,
     RaiseAction,
     evaluate_hand,
+    hand_score,
+    RANK_ORDER
 )
+
 
 
 
@@ -27,7 +30,8 @@ class PokerBot(multiprocessing.Process):
         self.conn = conn
         self.running = True
         self.name = name
-        self.action_count = 0
+        self.probs = PokerProbabilities()
+        self.playerManager = PlayerManager()
 
     def run(self):
         print(f"[{self.name}] Starting bot process...")
@@ -38,17 +42,20 @@ class PokerBot(multiprocessing.Process):
                     self.running = False
                     print(f"[{self.name}] Terminating bot process...")
                 else:
-                    # Assume msg is the game state JSON
-                    action = self.decide_action(msg)
-                    self.conn.send(action)
+                    game_state = json.loads(msg)
+                    if (game_state.get("is_end_state", False)):
+                        #end game state
+                        self.end_game(msg)
+
+                    else:
+                        #in-game state
+                        action = self.decide_action(game_state)
+                        self.conn.send(action)
+
             time.sleep(0.01)  # Prevent CPU overuse
 
-    def decide_action(self, game_state_json):
-        self.action_count += 1
-        game_state = json.loads(game_state_json)
-        is_end_state = game_state.get("is_end_state", bool)
-        if is_end_state:
-            self.end_game(game_state_json)
+
+    def decide_action(self, game_state):
 
         player_curr_bet = game_state.get("player_curr_bet", 0)
         board = game_state.get("board", [])
@@ -62,65 +69,18 @@ class PokerBot(multiprocessing.Process):
         players = game_state.get("players", {})
         player_curr_chips = players[self.name]["chips"]
         deck = Deck()
-        draws_left = 5 - len(board)
 
-        ############
-        if pot > 0:
-            pot_odds = curr_bet / (pot + curr_bet - player_curr_bet)
+        score = self.probs.get_score()
+
+        max_score = sum(self.probs.HAND_WEIGHTS)
+
+        if (score / max_score > 0.10):
+            return CallAction()
+        elif ():
+            pass
         else:
-            pot_odds = 1
-
         
-
-        # very hard to read logic
-        # but basically if hand has OK odds or has a decent hand already, raise, otherwise call.
-        # if hand has low odds and doesn't already have a ok hand, fold if bet was raised at all.
-
-        # if draws_left <= 2:
-        #     score = evaluate_hand(board + hand)[0][0]
-        #     if score > 2:
-        #         if score > 4:
-        #             # print("has good hand")
-        #             if curr_bet < player_curr_chips // 2:
-        #                 return RaiseAction(player_curr_chips // 2)
-        #             return CallAction()
-        #         # print("has ok hand")
-        #         if int(curr_bet * 0.5) < player_curr_chips // 2:
-        #             RaiseAction(int(curr_bet * 0.5))
-        #         return CallAction()
-        #     # print(f"in last draws, score = {score}, draws = {draws_left}")
-        #     if draws_left == 0 and score >= 1:
-        #         return CallAction()
-
-        # if player_curr_chips < ante * 2:
-        #     # print("desperate all in")
-        #     # print(f"current stack: {player_stack}, ante: {ante}")
-        #     return CallAction()
-        # if      (
-        #             flush_odds(hand, board) <= 0.5
-        #             and three_odds(hand, board) <= 0.4
-        #             and draws_left <= 1
-        #         ):
-        #     # print("bad odds")
-        #     if curr_bet - player_curr_bet == 0:
-        #         return CallAction()
-        #     return FoldAction()
-        # if (
-        #         flush_odds(hand, board) >= 0.5
-        #         or three_odds(hand, board) >= 0.6
-        #         or quad_odds(hand, board) >= 0.2
-        #     ):
-        #     # print("good odds")
-        #     if player_curr_chips // 10 > curr_bet:
-        #         return RaiseAction(player_curr_chips // 10)
-        #     if player_curr_chips > curr_bet - player_curr_bet:
-        #         return CallAction()
-        # if curr_bet - player_curr_bet <= player_curr_chips // 10 or draws_left >= 2:
-        #     # print("small bet, calling")
-        #     return CallAction()
-        # # print(f"curr_bet: {curr_bet}, player_curr_bet: {player_curr_bet}")
-        # # print("############### Bot is confuzed")
-        return FoldAction()
+            return FoldAction()
 
     def end_game(self, game_state_json):
         # Handle end of round state
@@ -129,16 +89,46 @@ class PokerBot(multiprocessing.Process):
         pass
 
 
+class PlayerManager():
+    players = {}
+
+
+
 
 class PokerProbabilities():
     #Constants
     TOTAL_GAME_CARDS = 7
     FLUSH_CARDS_NEEDED = 5
+    DIFFERENT_RANK_TYPES = len(RANK_ORDER)
 
     cardsInDeck = Deck().cards
     leftToDraw = TOTAL_GAME_CARDS
     currCards: list[Card] = [] 
 
+    HAND_WEIGHTS = [math.pow(1.75, (handRank + 1)/(2)) for handRank in range(len(hand_score))]
+
+    RANK_WEIGHTS = {}
+
+    MAX_RANK_VALUE = max(RANK_ORDER.values())
+    for r, v in RANK_ORDER.items():
+        RANK_WEIGHTS[r] = v/MAX_RANK_VALUE
+
+
+    def blank():
+        return 0
+
+
+    def get_score(self):
+        score = 0
+        for i in range(len(self.probOrder)-1, -1, -1):
+            prob = self.probOrder[i]
+            score += prob * self.HAND_WEIGHTS[i]
+
+            if prob == 1:
+                break
+            
+        return score
+            
 
     def nCr(self, NR):
         n, r = NR
@@ -222,130 +212,111 @@ class PokerProbabilities():
 
         return chance
     
+    def same_card_odds(self, sameNeeded):
+        rank_counts = {rank:0 for rank in Card.REVERSE_RANK_MAP.keys()} 
+        
 
-    def flush_odds(self):
+        num_matches = 0
+        max_match = 0
 
-        suits = [card.suit for card in self.currCards]
-        suit_counts = Counter(suits)
+        for card in self.currCards:             
+
+            rank_counts[card.rank] += 1
+            if rank_counts[card.rank] == sameNeeded:
+                num_matches += 1
+
+                max_match = max(max_match, RANK_ORDER[card.rank])
+
+                if num_matches == 2:
+                    return 0
+                
+            elif rank_counts[card.rank] > sameNeeded:
+                return 0
+        
+        if num_matches == 1:
+            #minus one since 2 has value of 2 :/
+            return ((max_match - 1) / self.DIFFERENT_RANK_TYPES)
+
+        wheightedChance = 0
 
 
-        for suit in Card.SUIT_MAP.values():
-            if suit not in suit_counts:
-                suit_counts[suit] = 0
-
-
-        deck_suits = [card.suit for card in self.cardsInDeck]
-        deck_suit_counts = Counter(deck_suits)
-
-        chance = 0
-
-
-        for suit, count in suit_counts.items():
-            cardsNeeded = (self.FLUSH_CARDS_NEEDED - count)
-            excess = self.leftToDraw - cardsNeeded
-            if count == self.FLUSH_CARDS_NEEDED:
-                return 1
-            elif (excess) < 0:
+        for rank, count in rank_counts.items():
+            if (sameNeeded - count > self.leftToDraw):
                 continue
+            combinations = [(4 - count, sameNeeded - count), (len(self.cardsInDeck) - (4 - count), self.leftToDraw - (sameNeeded - count))]
+            # print(combinations)
+            wheightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
 
-            #NOTE: The probabiliy of each suit is independant of eachother. (this may cause a slightly lower chance than actual in high-card cases)
-            #   -ex: with 17 cards, a flush is gaurented
-            # need to differentiate when you pick different amounts of the suit at hand
-            #TODO: Flip this to inverse of the probabillity of not getting enough cards. (I think is more efficient?) (maybe do that for anything more than the minimum)
-            combinations = [[(deck_suit_counts[suit], cardsNeeded + i), (len(self.cardsInDeck) - deck_suit_counts[suit], excess - i)] for i in range(excess + 1)]
-            print(combinations)
-            # chance = max(chance, self.evaluate_combinations(combinations))
-            chance += self.evaluate_combinations(combinations)
-            
 
-        return chance
-    
+        return wheightedChance
+
+
+    def pair_odds_temp(self):
+        return self.same_card_odds(2)
+
+    def three_of_a_kind_odds(self):
+        return self.same_card_odds(3)
+
+    def four_of_a_kind_odds(self):
+        return self.same_card_odds(4)
 
     def pair_odds(self):
-        rank_counts = dict.setdefault(Card.RANK_MAP.keys(), 0)
+        rank_counts = {rank:0 for rank in Card.REVERSE_RANK_MAP.keys()} 
         
+
         num_pairs = 0
+        max_pair = 0
 
-        single_cards = {}
-
-        for card in self.currCards: 
-            
+        for card in self.currCards:             
 
             rank_counts[card.rank] += 1
             if rank_counts[card.rank] == 2:
                 num_pairs += 1
+
+                max_pair = max(max_pair, RANK_ORDER[card.rank])
+
                 if num_pairs == 2:
                     return 0
+                
             elif rank_counts[card.rank] > 2:
                 return 0
         
+        if num_pairs == 1:
+            return ((max_pair - 1) / self.DIFFERENT_RANK_TYPES)
 
+        wheightedChance = 0
+
+
+        print(rank_counts)
 
         for rank, count in rank_counts.items():
-            pass
+            if (2 - count > self.leftToDraw):
+                continue
+            combinations = [(4 - count, 2 - count), (len(self.cardsInDeck) - (4 - count), self.leftToDraw - (2 - count))]
+            # print(combinations)
+            wheightedChance += self.evaluate_combinations(combinations) #* self.RANK_WEIGHTS[rank]
 
 
-        return 
+        return wheightedChance
+    
+    
+    probOrder = [blank, 
+                 pair_odds, 
+                 blank, 
+                 three_of_a_kind_odds, 
+                 blank, 
+                 flush_odds, 
+                 blank, 
+                 four_of_a_kind_odds,
+                 blank]
 
 
-
-
-def flush_probability_with_hand(current_hand, num_drawn=7, flush_size=5, num_suits=4, cards_per_suit=13):
-    suits = ['H', 'S', 'D', 'C'][:num_suits]
-    suit_counter = Counter(current_hand)
-
-    cards_in_hand = len(current_hand)
-    cards_to_draw = num_drawn - cards_in_hand
-    total_cards_remaining = num_suits * cards_per_suit - cards_in_hand
-
-    # If already have flush, guaranteed
-    if any(suit_counter[suit] >= flush_size for suit in suits):
-        return 1.0
-
-    total_ways = math.comb(total_cards_remaining, cards_to_draw)
-    flush_prob = 0.0
-
-    for suit in suits:
-        current_count = suit_counter[suit]
-        needed = flush_size - current_count
-        if needed > cards_to_draw or needed > cards_per_suit - current_count:
-            continue
-
-        max_possible_from_suit = min(cards_per_suit - current_count, cards_to_draw)
-        ways = 0
-
-        # Sum over the number of cards of the target suit drawn to reach flush
-        for k in range(needed, max_possible_from_suit + 1):
-            ways_suit = math.comb(cards_per_suit - current_count, k)
-            ways_other = math.comb(total_cards_remaining - (cards_per_suit - current_count), cards_to_draw - k)
-            ways += ways_suit * ways_other
-
-        flush_prob += ways / total_ways
-
-    # Cap at 1 in case of numerical floating overrun
-    return min(flush_prob, 1.0)
 
 
 def test():
-    
 
     probs = PokerProbabilities()
 
-    # chance = 1
-    # while (chance != 0):
-    #     deck = Deck()
-    #     deck.shuffle()
-
-    #     probs.reset_deck()
-
-    #     hand = deck.deal(2)
-    #     board = deck.deal(3)
-
-    #     probs.add_to_hand(hand + board)
-
-    #     chance = probs.flush_odds()
-
-    # print(hand+ board)
 
 
     deck = Deck()
@@ -355,7 +326,7 @@ def test():
     # print(type([(1, 2), (3, 4)][0]))
     # print(type([[(1, 2), (3, 4)],[(1, 2), (3, 4)]][0]))
     
-    hand = [Card('Hearts', '4'), Card('Hearts', '5'), Card('Hearts', '6'), Card('Hearts', '7'), Card('Spades', '4')]
+    hand = [Card('Hearts', '8'), Card('Hearts', '9'), Card('Hearts', '10'), Card('Hearts', 'K')]
     # hand = [Card('Hearts', '4'), Card('Hearts', '5'), Card('Hearts', '6'), Card('Clubs', '7'),Card('Spades', '4')]
     # hand = []
     board = []
@@ -363,13 +334,9 @@ def test():
     probs.take_from_deck(hand + board)
 
 
-    print(probs.currCards)
-    print('mine:', probs.flush_odds())
-    current_hand = ['H']
-    print('geeps:', flush_probability_with_hand(current_hand, num_drawn=14))
-    
-    print('reg:', 1 - (38*37)/(47*46))
-    print('4 needed:', 1 - (37*36)/(47*46))
+    # print(probs.pair_odds())
+
+    print(probs.HAND_WEIGHTS)
 
     
 
