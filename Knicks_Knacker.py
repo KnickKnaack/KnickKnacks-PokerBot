@@ -6,6 +6,7 @@ from collections import Counter
 import math
 import itertools
 
+import board
 
 # Import possible actions
 from board import (
@@ -99,6 +100,7 @@ class PokerProbabilities():
     #Constants
     TOTAL_GAME_CARDS = 7
     FLUSH_CARDS_NEEDED = 5
+    STRAIGHT_CARDS_NEEDED = 5
     DIFFERENT_RANK_TYPES = len(RANK_ORDER)
 
     cardsInDeck = Deck().cards
@@ -174,6 +176,38 @@ class PokerProbabilities():
 
             self.leftToDraw = self.leftToDraw - len(toTake)
 
+    def straight_odds(self):
+        currRanks = Counter([card.rank for card in self.currCards])
+
+        numMissingRanks = [0] * (len(board.ranks) - self.STRAIGHT_CARDS_NEEDED + 1)
+
+        i = 0
+
+        while (i < self.STRAIGHT_CARDS_NEEDED):
+            if board.ranks[i] not in currRanks:
+                for straightIndex in range(i + 1):
+                    numMissingRanks[straightIndex] += 1
+            i += 1
+        
+
+        while (i < len(board.ranks) - self.STRAIGHT_CARDS_NEEDED):
+            if board.ranks[i] not in currRanks:
+                for straightIndex in range(i-self.STRAIGHT_CARDS_NEEDED+1, i + 1):
+                    numMissingRanks[straightIndex] += 1
+            i += 1
+        i = len(board.ranks) - self.STRAIGHT_CARDS_NEEDED
+
+
+        while (i < len(board.ranks)):
+            if board.ranks[i] not in currRanks:
+                for straightIndex in range(i-self.STRAIGHT_CARDS_NEEDED+1, len(numMissingRanks)):
+                    numMissingRanks[straightIndex] += 1
+            i += 1
+
+        print(numMissingRanks)
+
+        return 0
+            
 
     def flush_odds(self):
 
@@ -251,7 +285,7 @@ class PokerProbabilities():
         return wheightedChance
 
 
-    def pair_odds_temp(self):
+    def pair_odds(self):
         return self.same_card_odds(2)
 
     def three_of_a_kind_odds(self):
@@ -260,7 +294,7 @@ class PokerProbabilities():
     def four_of_a_kind_odds(self):
         return self.same_card_odds(4)
 
-    def pair_odds(self):
+    def pair_odds_old(self):
         rank_counts = {rank:0 for rank in Card.REVERSE_RANK_MAP.keys()} 
         
 
@@ -287,14 +321,12 @@ class PokerProbabilities():
         wheightedChance = 0
 
 
-        print(rank_counts)
-
         for rank, count in rank_counts.items():
             if (2 - count > self.leftToDraw):
                 continue
             combinations = [(4 - count, 2 - count), (len(self.cardsInDeck) - (4 - count), self.leftToDraw - (2 - count))]
-            # print(combinations)
-            wheightedChance += self.evaluate_combinations(combinations) #* self.RANK_WEIGHTS[rank]
+
+            wheightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
 
 
         return wheightedChance
@@ -327,6 +359,8 @@ def test():
     # print(type([[(1, 2), (3, 4)],[(1, 2), (3, 4)]][0]))
     
     hand = [Card('Hearts', '8'), Card('Hearts', '9'), Card('Hearts', '10'), Card('Hearts', 'K')]
+    hand = [Card('Hearts', 'A')]
+    # hand = []
     # hand = [Card('Hearts', '4'), Card('Hearts', '5'), Card('Hearts', '6'), Card('Clubs', '7'),Card('Spades', '4')]
     # hand = []
     board = []
@@ -334,9 +368,8 @@ def test():
     probs.take_from_deck(hand + board)
 
 
-    # print(probs.pair_odds())
+    print(probs.straight_odds())
 
-    print(probs.HAND_WEIGHTS)
 
     
 
