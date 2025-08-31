@@ -179,29 +179,29 @@ class PokerProbabilities():
     def straight_odds(self):
         currRanks = Counter([card.rank for card in self.currCards])
 
-        numMissingRanks = [0] * (len(board.ranks) - self.STRAIGHT_CARDS_NEEDED + 1)
+        numMissingRanks = [0] * (len(board.ranks) - self.STRAIGHT_CARDS_NEEDED + 2)
 
         i = 0
 
         while (i < self.STRAIGHT_CARDS_NEEDED):
             if board.ranks[i] not in currRanks:
                 for straightIndex in range(i + 1):
-                    numMissingRanks[straightIndex] += 1
+                    numMissingRanks[straightIndex + 1] += 1
             i += 1
         
 
         while (i < len(board.ranks) - self.STRAIGHT_CARDS_NEEDED):
             if board.ranks[i] not in currRanks:
                 for straightIndex in range(i-self.STRAIGHT_CARDS_NEEDED+1, i + 1):
-                    numMissingRanks[straightIndex] += 1
+                    numMissingRanks[straightIndex + 1] += 1
             i += 1
         i = len(board.ranks) - self.STRAIGHT_CARDS_NEEDED
 
 
         while (i < len(board.ranks)):
             if board.ranks[i] not in currRanks:
-                for straightIndex in range(i-self.STRAIGHT_CARDS_NEEDED+1, len(numMissingRanks)):
-                    numMissingRanks[straightIndex] += 1
+                for straightIndex in range(i-self.STRAIGHT_CARDS_NEEDED+1, len(numMissingRanks) - 1):
+                    numMissingRanks[straightIndex + 1] += 1
             i += 1
 
         print(numMissingRanks)
