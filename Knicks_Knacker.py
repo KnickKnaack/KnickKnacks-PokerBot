@@ -255,7 +255,7 @@ class PokerProbabilities():
         
 
         num_matches = 0
-        max_match = 0
+        max_match = RANK_ORDER[0][0]
 
         for card in self.currCards:             
 
@@ -263,17 +263,18 @@ class PokerProbabilities():
             if rank_counts[card.rank] == sameNeeded:
                 num_matches += 1
 
-                max_match = max(max_match, RANK_ORDER[card.rank])
+                if (RANK_ORDER[card.rank] > RANK_ORDER[max_match]):
+                    max_match = card.rank
 
                 if num_matches == 2:
                     return 0
                 
             elif rank_counts[card.rank] > sameNeeded:
-                return 0
+                return 1
         
         if num_matches == 1:
             #minus one since 2 has value of 2 :/
-            return ((max_match - 1) / self.DIFFERENT_RANK_TYPES)
+            return self.RANK_WEIGHTS[max_match]
 
         wheightedChance = 0
 
@@ -299,6 +300,94 @@ class PokerProbabilities():
         return self.same_card_odds(4)
     
 
+    def two_pair_odds(self):
+        rank_counts = {rank:0 for rank in Card.REVERSE_RANK_MAP.keys()} 
+        
+        num_matches = 0
+        max_match = RANK_ORDER[0][0]
+
+        #Get counts and check for already existing full house
+        for card in self.currCards:             
+
+            rank_counts[card.rank] += 1
+            if rank_counts[card.rank] == 2:
+                num_matches += 1
+
+                if (RANK_ORDER[card.rank] > RANK_ORDER[max_match]):
+                    max_match = card.rank
+
+            elif rank_counts[card.rank] == 3:
+                return 1
+                
+        
+        if (num_matches >= 2):
+            return self.RANK_WEIGHTS[max_match]
+
+        wheightedChance = 0
+
+        checkedCombos = {}
+
+        #Get weighted probs for full houses
+        for rank, count in rank_counts.items():
+            for rank2, count2 in rank_counts.items():
+                if ((2 - count) + (2 - count2) > self.leftToDraw):
+                    continue
+
+                if (rank,rank2) in checkedCombos:
+                    continue
+
+                checkedCombos.add((rank, rank2))
+                checkedCombos.add((rank2, rank))
+
+
+                combinations = [(4 - count, 2 - count), (4 - count2, 2 - count2), (len(self.cardsInDeck) - (4 - count) - (4 - count2), self.leftToDraw - ((2 - count) + (2 - count2)))]
+                # print(combinations)
+                wheightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
+
+
+        return wheightedChance
+    
+
+    def full_house_odds(self):
+        rank_counts = {rank:0 for rank in Card.REVERSE_RANK_MAP.keys()} 
+        
+        two_matches = 0
+        three_matches = 0
+        max_match = RANK_ORDER[0][0]
+
+        #Get counts and check for already existing full house
+        for card in self.currCards:             
+
+            rank_counts[card.rank] += 1
+            if rank_counts[card.rank] == 3:
+                two_matches -= 1
+                three_matches += 1
+
+                if (RANK_ORDER[card.rank] > RANK_ORDER[max_match]):
+                    max_match = card.rank
+
+                
+            elif rank_counts[card.rank] == 2:
+                two_matches += 1
+        
+        if (three_matches >= 2) or (three_matches == 1 and two_matches >= 2):
+            return self.RANK_WEIGHTS[max_match]
+
+        wheightedChance = 0
+
+        #Get weighted probs for full houses
+        for rank, count in rank_counts.items():
+            for rank2, count2 in rank_counts.items():
+                if ((3 - count) + (2 - count2) > self.leftToDraw):
+                    continue
+
+                combinations = [(4 - count, 3 - count), (4 - count2, 2 - count2), (len(self.cardsInDeck) - (4 - count) - (4 - count2), self.leftToDraw - ((3 - count) + (2 - count2)))]
+                # print(combinations)
+                wheightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
+
+
+        return wheightedChance
+
     def high_card(self):
         maxRankWeight = 0
 
@@ -311,11 +400,11 @@ class PokerProbabilities():
     
     probOrder = [high_card, 
                  pair_odds, 
-                 blank, 
+                 two_pair_odds, 
                  three_of_a_kind_odds, 
                  blank, 
                  flush_odds, 
-                 blank, 
+                 full_house_odds, 
                  four_of_a_kind_odds,
                  blank]
 
@@ -346,7 +435,7 @@ def test():
     probs.take_from_deck(hand + board)
 
 
-    print(probs.get_score())
+    print(probs.two_pair_odds())
 
 
     
