@@ -255,7 +255,7 @@ class PokerProbabilities():
         
 
         num_matches = 0
-        max_match = RANK_ORDER[0][0]
+        max_match = board.ranks[0]
 
         for card in self.currCards:             
 
@@ -304,7 +304,7 @@ class PokerProbabilities():
         rank_counts = {rank:0 for rank in Card.REVERSE_RANK_MAP.keys()} 
         
         num_matches = 0
-        max_match = RANK_ORDER[0][0]
+        max_match = board.ranks[0]
 
         #Get counts and check for already existing full house
         for card in self.currCards:             
@@ -325,7 +325,7 @@ class PokerProbabilities():
 
         wheightedChance = 0
 
-        checkedCombos = {}
+        checkedCombos = set()
 
         #Get weighted probs for full houses
         for rank, count in rank_counts.items():
@@ -353,7 +353,7 @@ class PokerProbabilities():
         
         two_matches = 0
         three_matches = 0
-        max_match = RANK_ORDER[0][0]
+        max_match = board.ranks[0]
 
         #Get counts and check for already existing full house
         for card in self.currCards:             
@@ -425,17 +425,17 @@ def test():
     # print(type([[(1, 2), (3, 4)],[(1, 2), (3, 4)]][0]))
     
     hand = [Card('Hearts', '8'), Card('Hearts', '9'), Card('Hearts', '10'), Card('Hearts', 'K')]
-    hand = [Card('Hearts', 'A')]
+    hand = [Card('H', 'A'), Card('S', 'A')]
+
     # hand = []
     # hand = [Card('Hearts', '4'), Card('Hearts', '5'), Card('Hearts', '6'), Card('Clubs', '7'),Card('Spades', '4')]
     # hand = []
     board = []
-    print(probs.HAND_WEIGHTS)
 
     probs.take_from_deck(hand + board)
 
 
-    print(probs.two_pair_odds())
+    print(probs.get_score())
 
 
     
