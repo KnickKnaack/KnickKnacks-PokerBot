@@ -80,7 +80,6 @@ class PokerBot(multiprocessing.Process):
         elif ():
             pass
         else:
-        
             return FoldAction()
 
     def end_game(self, game_state_json):
@@ -116,14 +115,14 @@ class PokerProbabilities():
         RANK_WEIGHTS[r] = v/MAX_RANK_VALUE
 
 
-    def blank():
+    def blank(self):
         return 0
 
 
     def get_score(self):
         score = 0
         for i in range(len(self.probOrder)-1, -1, -1):
-            prob = self.probOrder[i]
+            prob = self.probOrder[i](self)
             score += prob * self.HAND_WEIGHTS[i]
 
             if prob == 1:
@@ -368,7 +367,7 @@ def test():
     probs.take_from_deck(hand + board)
 
 
-    print(probs.straight_odds())
+    print(probs.get_score())
 
 
     
