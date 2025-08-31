@@ -121,12 +121,17 @@ class PokerProbabilities():
 
     def get_score(self):
         score = 0
+        hasHand = False
         for i in range(len(self.probOrder)-1, -1, -1):
+            if hasHand:
+                score += self.HAND_WEIGHTS[i]
+                continue
+
             prob = self.probOrder[i](self)
             score += prob * self.HAND_WEIGHTS[i]
 
             if prob == 1:
-                break
+                hasHand = True
             
         return score
             
@@ -292,46 +297,19 @@ class PokerProbabilities():
 
     def four_of_a_kind_odds(self):
         return self.same_card_odds(4)
+    
 
-    def pair_odds_old(self):
-        rank_counts = {rank:0 for rank in Card.REVERSE_RANK_MAP.keys()} 
+    def high_card(self):
+        maxRankWeight = 0
+
+        for c in self.currCards:
+            self.RANK_WEIGHTS[c.rank]
+
+        return maxRankWeight
         
-
-        num_pairs = 0
-        max_pair = 0
-
-        for card in self.currCards:             
-
-            rank_counts[card.rank] += 1
-            if rank_counts[card.rank] == 2:
-                num_pairs += 1
-
-                max_pair = max(max_pair, RANK_ORDER[card.rank])
-
-                if num_pairs == 2:
-                    return 0
-                
-            elif rank_counts[card.rank] > 2:
-                return 0
-        
-        if num_pairs == 1:
-            return ((max_pair - 1) / self.DIFFERENT_RANK_TYPES)
-
-        wheightedChance = 0
-
-
-        for rank, count in rank_counts.items():
-            if (2 - count > self.leftToDraw):
-                continue
-            combinations = [(4 - count, 2 - count), (len(self.cardsInDeck) - (4 - count), self.leftToDraw - (2 - count))]
-
-            wheightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
-
-
-        return wheightedChance
     
     
-    probOrder = [blank, 
+    probOrder = [high_card, 
                  pair_odds, 
                  blank, 
                  three_of_a_kind_odds, 
@@ -363,6 +341,7 @@ def test():
     # hand = [Card('Hearts', '4'), Card('Hearts', '5'), Card('Hearts', '6'), Card('Clubs', '7'),Card('Spades', '4')]
     # hand = []
     board = []
+    print(probs.HAND_WEIGHTS)
 
     probs.take_from_deck(hand + board)
 
