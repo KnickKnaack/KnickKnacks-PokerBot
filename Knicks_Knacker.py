@@ -115,9 +115,9 @@ class PokerProbabilities():
     leftToDraw = TOTAL_GAME_CARDS
     currCards: list[Card] = [] 
 
-    NUM_STRAIGHTS = DIFFERENT_RANK_TYPES - ((STRAIGHT_CARDS_NEEDED - 1) + 1) # plus 1 for ace used one both ends
+    NUM_STRAIGHTS = DIFFERENT_RANK_TYPES - ((STRAIGHT_CARDS_NEEDED - 1)) + 1 # plus 1 for ace used one both ends
     STRAIGHT_WEIGHTS = [0] * NUM_STRAIGHTS
-    for i in range(DIFFERENT_RANK_TYPES):
+    for i in range(NUM_STRAIGHTS):
         STRAIGHT_WEIGHTS[i] += (i+1)/NUM_STRAIGHTS
 
 
@@ -234,7 +234,7 @@ class PokerProbabilities():
             #minus one since 2 has value of 2 :/
             return self.RANK_WEIGHTS[max_match]
 
-        wheightedChance = 0
+        weightedChance = 0
 
 
         for rank, count in rank_counts.items():
@@ -242,10 +242,10 @@ class PokerProbabilities():
                 continue
             combinations = [(4 - count, numNeeded - count), (len(self.cardsInDeck) - (4 - count), self.leftToDraw - (numNeeded - count))]
             # print(combinations)
-            wheightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
+            weightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
 
 
-        return wheightedChance
+        return weightedChance
     
 
 
@@ -277,7 +277,7 @@ class PokerProbabilities():
         if (num_matches >= 2):
             return self.RANK_WEIGHTS[max_match]
 
-        wheightedChance = 0
+        weightedChance = 0
 
         checkedCombos = set()
 
@@ -296,10 +296,10 @@ class PokerProbabilities():
 
                 combinations = [(4 - count, 2 - count), (4 - count2, 2 - count2), (len(self.cardsInDeck) - (4 - count) - (4 - count2), self.leftToDraw - ((2 - count) + (2 - count2)))]
                 # print(combinations)
-                wheightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
+                weightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
 
 
-        return wheightedChance
+        return weightedChance
 
 
 
@@ -308,37 +308,56 @@ class PokerProbabilities():
 
 
 
-    def straight_odds(self):
-        currRanks = Counter([card.rank for card in self.currCards])
+    def straight_odds(self, weighted = True):
+        currRanks = set([card.rank for card in self.currCards])
 
-        numMissingRanks = [0] * (len(board.ranks) - self.STRAIGHT_CARDS_NEEDED + 2)
+        if weighted:
+            weighted = 0
+        else:
+            weighted = 1
 
-        i = 0
+        weightedChance = 0
 
-        while (i < self.STRAIGHT_CARDS_NEEDED):
-            if board.ranks[i] not in currRanks:
-                for straightIndex in range(i + 1):
-                    numMissingRanks[straightIndex + 1] += 1
-            i += 1
+        #Check ace start straight
         
+        cardsHave = 0
+        if (board.ranks[-1] in currRanks):
+            cardsHave += 1
 
-        while (i < len(board.ranks) - self.STRAIGHT_CARDS_NEEDED):
-            if board.ranks[i] not in currRanks:
-                for straightIndex in range(i-self.STRAIGHT_CARDS_NEEDED+1, i + 1):
-                    numMissingRanks[straightIndex + 1] += 1
-            i += 1
-        i = len(board.ranks) - self.STRAIGHT_CARDS_NEEDED
+        for i in range(self.STRAIGHT_CARDS_NEEDED - 1):
+                if (board.ranks[i] in currRanks):
+                    cardsHave += 1
 
+        cardsLeftover = self.leftToDraw - ((self.STRAIGHT_CARDS_NEEDED - cardsHave))
 
-        while (i < len(board.ranks)):
-            if board.ranks[i] not in currRanks:
-                for straightIndex in range(i-self.STRAIGHT_CARDS_NEEDED+1, len(numMissingRanks) - 1):
-                    numMissingRanks[straightIndex + 1] += 1
-            i += 1
+        if (cardsHave == self.STRAIGHT_CARDS_NEEDED):
+            weightedChance += max(self.STRAIGHT_WEIGHTS[0], weighted)
+        elif (cardsLeftover >= 0):
+            combinations = [(4 , 1)] * (self.STRAIGHT_CARDS_NEEDED - cardsHave)
+            combinations.append((len(self.cardsInDeck) - (self.STRAIGHT_CARDS_NEEDED - cardsHave), cardsLeftover))
+            # print(combinations)
+            weightedChance += self.evaluate_combinations(combinations) * max(self.STRAIGHT_WEIGHTS[0], weighted)
 
-        print(numMissingRanks)
+        #Check the rest of the straights noramlly
+        for i in range(self.NUM_STRAIGHTS - 1):
+            cardsHave = 0
 
-        return 0
+            for j in range(self.STRAIGHT_CARDS_NEEDED - 1):
+                if (board.ranks[i + j] in currRanks):
+                    cardsHave += 1
+
+            cardsLeftover = self.leftToDraw - ((self.STRAIGHT_CARDS_NEEDED - cardsHave))
+
+            if (cardsHave == self.STRAIGHT_CARDS_NEEDED):
+                weightedChance += max(self.STRAIGHT_WEIGHTS[i + 1], weighted) 
+            elif (cardsLeftover >= 0):
+                combinations = [(4 , 1)] * (self.STRAIGHT_CARDS_NEEDED - cardsHave)
+                combinations.append((len(self.cardsInDeck) - (self.STRAIGHT_CARDS_NEEDED - cardsHave), cardsLeftover))
+                # print(combinations)
+                weightedChance += self.evaluate_combinations(combinations) * max(self.STRAIGHT_WEIGHTS[i + 1], weighted) #plus one to account for extra straight 
+                
+
+        return weightedChance
 
 
     def flush_odds(self):
@@ -404,7 +423,7 @@ class PokerProbabilities():
         if (three_matches >= 2) or (three_matches == 1 and two_matches >= 2):
             return self.RANK_WEIGHTS[max_match]
 
-        wheightedChance = 0
+        weightedChance = 0
 
         #Get weighted probs for full houses
         for rank, count in rank_counts.items():
@@ -414,10 +433,10 @@ class PokerProbabilities():
 
                 combinations = [(4 - count, 3 - count), (4 - count2, 2 - count2), (len(self.cardsInDeck) - (4 - count) - (4 - count2), self.leftToDraw - ((3 - count) + (2 - count2)))]
                 # print(combinations)
-                wheightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
+                weightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
 
 
-        return wheightedChance
+        return weightedChance
 
 
 
@@ -427,7 +446,7 @@ class PokerProbabilities():
 
 
     def straight_flush_odds(self):
-        return self.flush_odds() * 0.1    
+        return self.flush_odds() * self.straight_odds()    
     
         
     
@@ -458,8 +477,10 @@ def test():
     # print(type([(1, 2), (3, 4)][0]))
     # print(type([[(1, 2), (3, 4)],[(1, 2), (3, 4)]][0]))
     
-    hand = [Card('Hearts', '8'), Card('Hearts', '9'), Card('Hearts', '10'), Card('Hearts', 'K')]
-    hand = [Card('H', 'A'), Card('S', 'A')]
+    hand = [Card('Hearts', '8'), Card('Hearts', '9'), Card('Hearts', '10'), Card('Hearts', 'J')]
+    hand = [Card('Hearts', 'A'), Card('Hearts', '2'), Card('Hearts', '3'), Card('Hearts', '4'), Card('Hearts', '5')]
+    hand = [Card('Hearts', 'J'), Card('Hearts', '10'), Card('Hearts', 'K'), Card('Hearts', 'A')]
+    # hand = [Card('H', 'A'), Card('S', 'A')]
 
     # hand = []
     # hand = [Card('Hearts', '4'), Card('Hearts', '5'), Card('Hearts', '6'), Card('Clubs', '7'),Card('Spades', '4')]
@@ -468,8 +489,10 @@ def test():
 
     probs.take_from_deck(hand + board)
 
+    print(probs.STRAIGHT_WEIGHTS)
 
-    print(probs.get_score())
+
+    print(probs.straight_odds(weighted=False))
 
 
     
