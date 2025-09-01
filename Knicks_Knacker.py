@@ -87,7 +87,7 @@ class PokerBot(multiprocessing.Process):
         elif (possibleBet > curr_bet * (1 + self.tolerance)):
             return RaiseAction(possibleBet)
         elif (possibleBet < curr_bet * (1 - self.tolerance)):
-            return FoldAction
+            return FoldAction()
         else:
             return CallAction()
 
