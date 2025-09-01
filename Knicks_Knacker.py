@@ -26,12 +26,15 @@ from board import (
 
 
 class PokerBot(multiprocessing.Process):
+    tolerance = 0.15
+
     def __init__(self, conn, name="Knicks Knacker"):
         super().__init__()
         self.conn = conn
         self.running = True
         self.name = name
         self.probs = PokerProbabilities()
+        self.boardProbs = PokerProbabilities()
         self.playerManager = PlayerManager()
 
     def run(self):
@@ -58,11 +61,12 @@ class PokerBot(multiprocessing.Process):
 
     def decide_action(self, game_state):
 
+        self.boardProbs.reset_deck()
+        self.probs.reset_deck()
+
         player_curr_bet = game_state.get("player_curr_bet", 0)
-        board = game_state.get("board", [])
-        board = [Card(suit=x["suit"], rank=x["rank"]) for x in board]
-        hand = game_state.get("hand", [])
-        hand = [Card(suit=x["suit"], rank=x["rank"]) for x in hand]
+        board = [Card(suit=x["suit"], rank=x["rank"]) for x in game_state.get("board", [])]
+        hand = [Card(suit=x["suit"], rank=x["rank"]) for x in game_state.get("hand", [])]
         # can_check = game_state.get("can_check", False)
         curr_bet = game_state.get("curr_bet", 0)
         ante = game_state.get("ante", 0)
@@ -72,15 +76,20 @@ class PokerBot(multiprocessing.Process):
         deck = Deck()
 
         score = self.probs.get_score()
+        boardScore = self.boardProbs.get_score()
 
-        max_score = sum(self.probs.HAND_WEIGHTS)
+        scoreDifference = score - boardScore
 
-        if (score / max_score > 0.10):
-            return CallAction()
-        elif ():
-            pass
-        else:
+        possibleBet = math.floor((score/self.probs.MAX_SCORE) * player_curr_chips)
+
+        if (scoreDifference < 0 and curr_bet != 0):
             return FoldAction()
+        elif (possibleBet > curr_bet * (1 + self.tolerance)):
+            return RaiseAction(possibleBet)
+        elif (possibleBet < curr_bet * (1 - self.tolerance)):
+            return FoldAction
+        else:
+            return CallAction()
 
     def end_game(self, game_state_json):
         # Handle end of round state
@@ -107,6 +116,7 @@ class PokerProbabilities():
     currCards: list[Card] = [] 
 
     HAND_WEIGHTS = [math.pow(1.75, (handRank + 1)/(2)) for handRank in range(len(hand_score))]
+    MAX_SCORE = sum(HAND_WEIGHTS)
 
     RANK_WEIGHTS = {}
 
@@ -212,6 +222,9 @@ class PokerProbabilities():
 
         return 0
             
+
+    def straight_flush_odds(self):
+        return self.flush_odds * 0.1
 
     def flush_odds(self):
 
@@ -406,7 +419,7 @@ class PokerProbabilities():
                  flush_odds, 
                  full_house_odds, 
                  four_of_a_kind_odds,
-                 blank]
+                 straight_flush_odds]
 
 
 
