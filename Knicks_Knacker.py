@@ -80,7 +80,7 @@ class PokerBot(multiprocessing.Process):
 
         scoreDifference = score - boardScore
 
-        possibleBet = math.floor((score/(self.probs.MAX_SCORE - sum(self.probs.HAND_WEIGHTS[-2:]))) * player_curr_chips)
+        possibleBet = min(math.floor((score/(self.probs.MAX_SCORE - sum(self.probs.HAND_WEIGHTS[-2:]))) * player_curr_chips), player_curr_chips)
 
         if (scoreDifference < 0 and curr_bet != 0):
             return FoldAction()
