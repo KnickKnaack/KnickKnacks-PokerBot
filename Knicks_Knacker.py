@@ -115,16 +115,23 @@ class PokerProbabilities():
     leftToDraw = TOTAL_GAME_CARDS
     currCards: list[Card] = [] 
 
+    NUM_STRAIGHTS = DIFFERENT_RANK_TYPES - ((STRAIGHT_CARDS_NEEDED - 1) + 1) # plus 1 for ace used one both ends
+    STRAIGHT_WEIGHTS = [0] * NUM_STRAIGHTS
+    for i in range(DIFFERENT_RANK_TYPES):
+        STRAIGHT_WEIGHTS[i] += (i+1)/NUM_STRAIGHTS
+
+
     HAND_WEIGHTS = [math.pow(1.75, (handRank + 1)/(2)) for handRank in range(len(hand_score))]
     MAX_SCORE = sum(HAND_WEIGHTS)
 
-    RANK_WEIGHTS = {}
 
+    RANK_WEIGHTS = {}
     MAX_RANK_VALUE = max(RANK_ORDER.values())
     for r, v in RANK_ORDER.items():
         RANK_WEIGHTS[r] = v/MAX_RANK_VALUE
 
-
+    
+    #-------------------------------------HELPER FUNCTIONS--------------------------------------
     def blank(self):
         return 0
 
@@ -173,8 +180,6 @@ class PokerProbabilities():
     
         return probability
         
-
-
     def reset_deck(self):
         self.cardsInDeck = Deck().cards
         self.leftToDraw = self.TOTAL_GAME_CARDS
@@ -190,80 +195,20 @@ class PokerProbabilities():
 
             self.leftToDraw = self.leftToDraw - len(toTake)
 
-    def straight_odds(self):
-        currRanks = Counter([card.rank for card in self.currCards])
 
-        numMissingRanks = [0] * (len(board.ranks) - self.STRAIGHT_CARDS_NEEDED + 2)
+    #------------------------------------HAND PROBABILITIES------------------------------------------
 
-        i = 0
+    def high_card(self):
+        maxRankWeight = 0
 
-        while (i < self.STRAIGHT_CARDS_NEEDED):
-            if board.ranks[i] not in currRanks:
-                for straightIndex in range(i + 1):
-                    numMissingRanks[straightIndex + 1] += 1
-            i += 1
-        
+        for c in self.currCards:
+            self.RANK_WEIGHTS[c.rank]
 
-        while (i < len(board.ranks) - self.STRAIGHT_CARDS_NEEDED):
-            if board.ranks[i] not in currRanks:
-                for straightIndex in range(i-self.STRAIGHT_CARDS_NEEDED+1, i + 1):
-                    numMissingRanks[straightIndex + 1] += 1
-            i += 1
-        i = len(board.ranks) - self.STRAIGHT_CARDS_NEEDED
+        return maxRankWeight
 
 
-        while (i < len(board.ranks)):
-            if board.ranks[i] not in currRanks:
-                for straightIndex in range(i-self.STRAIGHT_CARDS_NEEDED+1, len(numMissingRanks) - 1):
-                    numMissingRanks[straightIndex + 1] += 1
-            i += 1
 
-        print(numMissingRanks)
-
-        return 0
-            
-
-    def straight_flush_odds(self):
-        return self.flush_odds() * 0.1
-
-    def flush_odds(self):
-
-        suits = [card.suit for card in self.currCards]
-        suit_counts = Counter(suits)
-
-
-        for suit in Card.SUIT_MAP.values():
-            if suit not in suit_counts:
-                suit_counts[suit] = 0
-
-
-        deck_suits = [card.suit for card in self.cardsInDeck]
-        deck_suit_counts = Counter(deck_suits)
-
-        chance = 0
-
-
-        for suit, count in suit_counts.items():
-            cardsNeeded = (self.FLUSH_CARDS_NEEDED - count)
-            excess = self.leftToDraw - cardsNeeded
-            if count == self.FLUSH_CARDS_NEEDED:
-                return 1
-            elif (excess) < 0:
-                continue
-
-            #NOTE: The probabiliy of each suit is independant of eachother. (this may cause a slightly lower chance than actual in high-card cases)
-            #   -ex: with 17 cards, a flush is gaurented
-            # need to differentiate when you pick different amounts of the suit at hand
-            #TODO: Flip this to inverse of the probabillity of not getting enough cards. (I think is more efficient?) (maybe do that for anything more than the minimum)
-            combinations = [[(deck_suit_counts[suit], cardsNeeded + i), (len(self.cardsInDeck) - deck_suit_counts[suit], excess - i)] for i in range(excess + 1)]
-            # print(combinations)
-            # chance = max(chance, self.evaluate_combinations(combinations))
-            chance += self.evaluate_combinations(combinations)
-            
-
-        return chance
-    
-    def same_card_odds(self, sameNeeded):
+    def set_card_odds(self, numNeeded):
         rank_counts = {rank:0 for rank in Card.REVERSE_RANK_MAP.keys()} 
         
 
@@ -273,7 +218,7 @@ class PokerProbabilities():
         for card in self.currCards:             
 
             rank_counts[card.rank] += 1
-            if rank_counts[card.rank] == sameNeeded:
+            if rank_counts[card.rank] == numNeeded:
                 num_matches += 1
 
                 if (RANK_ORDER[card.rank] > RANK_ORDER[max_match]):
@@ -282,7 +227,7 @@ class PokerProbabilities():
                 if num_matches == 2:
                     return 0
                 
-            elif rank_counts[card.rank] > sameNeeded:
+            elif rank_counts[card.rank] > numNeeded:
                 return 1
         
         if num_matches == 1:
@@ -293,25 +238,21 @@ class PokerProbabilities():
 
 
         for rank, count in rank_counts.items():
-            if (sameNeeded - count > self.leftToDraw):
+            if (numNeeded - count > self.leftToDraw):
                 continue
-            combinations = [(4 - count, sameNeeded - count), (len(self.cardsInDeck) - (4 - count), self.leftToDraw - (sameNeeded - count))]
+            combinations = [(4 - count, numNeeded - count), (len(self.cardsInDeck) - (4 - count), self.leftToDraw - (numNeeded - count))]
             # print(combinations)
             wheightedChance += self.evaluate_combinations(combinations) * self.RANK_WEIGHTS[rank]
 
 
         return wheightedChance
+    
 
 
     def pair_odds(self):
-        return self.same_card_odds(2)
+        return self.set_card_odds(2)
 
-    def three_of_a_kind_odds(self):
-        return self.same_card_odds(3)
 
-    def four_of_a_kind_odds(self):
-        return self.same_card_odds(4)
-    
 
     def two_pair_odds(self):
         rank_counts = {rank:0 for rank in Card.REVERSE_RANK_MAP.keys()} 
@@ -359,7 +300,84 @@ class PokerProbabilities():
 
 
         return wheightedChance
-    
+
+
+
+    def three_of_a_kind_odds(self):
+        return self.set_card_odds(3)
+
+
+
+    def straight_odds(self):
+        currRanks = Counter([card.rank for card in self.currCards])
+
+        numMissingRanks = [0] * (len(board.ranks) - self.STRAIGHT_CARDS_NEEDED + 2)
+
+        i = 0
+
+        while (i < self.STRAIGHT_CARDS_NEEDED):
+            if board.ranks[i] not in currRanks:
+                for straightIndex in range(i + 1):
+                    numMissingRanks[straightIndex + 1] += 1
+            i += 1
+        
+
+        while (i < len(board.ranks) - self.STRAIGHT_CARDS_NEEDED):
+            if board.ranks[i] not in currRanks:
+                for straightIndex in range(i-self.STRAIGHT_CARDS_NEEDED+1, i + 1):
+                    numMissingRanks[straightIndex + 1] += 1
+            i += 1
+        i = len(board.ranks) - self.STRAIGHT_CARDS_NEEDED
+
+
+        while (i < len(board.ranks)):
+            if board.ranks[i] not in currRanks:
+                for straightIndex in range(i-self.STRAIGHT_CARDS_NEEDED+1, len(numMissingRanks) - 1):
+                    numMissingRanks[straightIndex + 1] += 1
+            i += 1
+
+        print(numMissingRanks)
+
+        return 0
+
+
+    def flush_odds(self):
+
+        suits = [card.suit for card in self.currCards]
+        suit_counts = Counter(suits)
+
+
+        for suit in Card.SUIT_MAP.values():
+            if suit not in suit_counts:
+                suit_counts[suit] = 0
+
+
+        deck_suits = [card.suit for card in self.cardsInDeck]
+        deck_suit_counts = Counter(deck_suits)
+
+        chance = 0
+
+
+        for suit, count in suit_counts.items():
+            cardsNeeded = (self.FLUSH_CARDS_NEEDED - count)
+            excess = self.leftToDraw - cardsNeeded
+            if count == self.FLUSH_CARDS_NEEDED:
+                return 1
+            elif (excess) < 0:
+                continue
+
+            #NOTE: The probabiliy of each suit is independant of eachother. (this may cause a slightly lower chance than actual in high-card cases)
+            #   -ex: with 17 cards, a flush is gaurented
+            # need to differentiate when you pick different amounts of the suit at hand
+            #TODO: Flip this to inverse of the probabillity of not getting enough cards. (I think is more efficient?) (maybe do that for anything more than the minimum)
+            combinations = [[(deck_suit_counts[suit], cardsNeeded + i), (len(self.cardsInDeck) - deck_suit_counts[suit], excess - i)] for i in range(excess + 1)]
+            # print(combinations)
+            # chance = max(chance, self.evaluate_combinations(combinations))
+            chance += self.evaluate_combinations(combinations)
+            
+
+        return chance      
+
 
     def full_house_odds(self):
         rank_counts = {rank:0 for rank in Card.REVERSE_RANK_MAP.keys()} 
@@ -401,13 +419,16 @@ class PokerProbabilities():
 
         return wheightedChance
 
-    def high_card(self):
-        maxRankWeight = 0
 
-        for c in self.currCards:
-            self.RANK_WEIGHTS[c.rank]
 
-        return maxRankWeight
+    def four_of_a_kind_odds(self):
+        return self.set_card_odds(4)
+
+
+
+    def straight_flush_odds(self):
+        return self.flush_odds() * 0.1    
+    
         
     
     
