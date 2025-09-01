@@ -224,7 +224,7 @@ class PokerProbabilities():
             
 
     def straight_flush_odds(self):
-        return self.flush_odds * 0.1
+        return self.flush_odds() * 0.1
 
     def flush_odds(self):
 
@@ -256,7 +256,7 @@ class PokerProbabilities():
             # need to differentiate when you pick different amounts of the suit at hand
             #TODO: Flip this to inverse of the probabillity of not getting enough cards. (I think is more efficient?) (maybe do that for anything more than the minimum)
             combinations = [[(deck_suit_counts[suit], cardsNeeded + i), (len(self.cardsInDeck) - deck_suit_counts[suit], excess - i)] for i in range(excess + 1)]
-            print(combinations)
+            # print(combinations)
             # chance = max(chance, self.evaluate_combinations(combinations))
             chance += self.evaluate_combinations(combinations)
             
