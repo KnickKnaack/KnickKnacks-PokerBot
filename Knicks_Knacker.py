@@ -5,7 +5,8 @@ import time
 from collections import Counter
 import math
 import itertools
-
+import socket
+import struct
 import board
 
 # Import possible actions
@@ -22,41 +23,165 @@ from board import (
 )
 
 
+def _send_json(conn, obj):
+        data = json.dumps(obj, separators=(",", ":")).encode("utf-8")
+        conn.sendall(struct.pack(">I", len(data)) + data)
 
+
+def _recv_json(conn, max_bytes=1 << 20):
+    hdr = _recvall(conn, 4)
+    if not hdr:
+        raise ConnectionError("closed")
+    n = struct.unpack(">I", hdr)[0]
+    if n > max_bytes:
+        raise ValueError("message too large")
+    payload = _recvall(conn, n)
+    return json.loads(payload.decode("utf-8"))
+
+
+def _recvall(conn, n):
+    buf = bytearray()
+    while len(buf) < n:
+        chunk = conn.recv(n - len(buf))
+        if not chunk:
+            raise ConnectionError("socket closed early")
+        buf.extend(chunk)
+    return bytes(buf)
+
+
+def _enum_to_wire(a):
+    if isinstance(a, FoldAction):
+        return {"move": "fold"}
+    if isinstance(a, CheckAction):
+        return {"move": "check"}
+    if isinstance(a, CallAction):
+        return {"move": "call"}
+    if isinstance(a, RaiseAction):
+        return {"move": "raise", "amount": int(a.amount)}
+    # safety fallback
+    return {"move": "fold"}
 
 
 class PokerBot(multiprocessing.Process):
     tolerance = 0.15
 
-    def __init__(self, conn, name="Knicks Knacker"):
+
+    def __init__(self, name="Knicks Knacker", host="0.0.0.0", port=5001):
         super().__init__()
-        self.conn = conn
         self.running = True
         self.name = name
+        self.host = host
+        self.port = int(port)
+        self.action_count = 0
+        
         self.probs = PokerProbabilities()
         self.boardProbs = PokerProbabilities()
         self.playerManager = PlayerManager()
 
+
     def run(self):
-        print(f"[{self.name}] Starting bot process...")
-        while self.running:
-            if self.conn.poll():  # Check for incoming message
-                msg = self.conn.recv()
-                if msg == "terminate":
-                    self.running = False
-                    print(f"[{self.name}] Terminating bot process...")
-                else:
-                    game_state = json.loads(msg)
-                    if (game_state.get("is_end_state", False)):
-                        #end game state
-                        self.end_game(msg)
+        print(f"[{self.name}] Listening on {self.host}:{self.port} ...")
 
+        with socket.create_server((self.host, self.port)) as srv:
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            srv.settimeout(1.0)  # so we can check self.running
+            while self.running:
+                try:
+                    conn, addr = srv.accept()
+                except socket.timeout:
+                    continue
+                except OSError:
+                    break
+                with conn:
+                    conn.settimeout(5.0)
+                    try:
+                        gameState = _recv_json(conn)
+                    except Exception:
+                        # bad frame or connection issue; ignore this connection
+                        continue
+
+                    op = gameState.get("op")
+                    try:
+                        # Handle terminate
+                        if op == "terminate":
+                            self.running = False
+                            _send_json(conn, {"ok": True})
+                            print(f"[{self.name}] Terminating on request...")
+                            continue
+
+                        # Handle end of round (or start of brand new game)
+                        elif op == "end":
+                            state_obj = gameState.get("state", {})
+                            game_state_json = json.dumps(state_obj, separators=(",", ":"))
+                            print(f"\tRecieved end of game state")
+                            try:
+                                self.end_game(game_state_json)
+                            except Exception as e:
+                                print(f"[{self.name}] error in end_game: {e}")
+                            continue
+
+                        # Handle action request
+                        elif op == "act":
+                            state_obj = gameState.get("state", {})
+                            game_state_json = json.dumps(state_obj, separators=(",", ":"))
+                            try:
+                                action_enum = self.decide_action(game_state_json)
+                            except Exception as e:
+                                # Don't let a bot exception kill the connection/process.
+                                print(f"[{self.name}] decide_action raised: {e}")
+                                action_enum = FoldAction()
+                            self.action_count += 1
+                            try:
+                                _send_json(conn, _enum_to_wire(action_enum))
+                            except Exception as e:
+                                print(f"[{self.name}] failed to send action: {e}")
+                            print(f"\tSending action, {action_enum}")
+
+                        else:
+                            print("This is a bad json?")
+                            if "state" not in gameState and len(gameState) > 0:
+                                # Treat entire object as state
+                                game_state_json = json.dumps(gameState, separators=(",", ":"))
+                                try:
+                                    action_enum = self.decide_action(game_state_json)
+                                except Exception as e:
+                                    print(f"[{self.name}] decide_action raised: {e}")
+                                    action_enum = FoldAction()
+                                self.action_count += 1
+                                try:
+                                    _send_json(conn, _enum_to_wire(action_enum))
+                                except Exception as e:
+                                    print(f"[{self.name}] failed to send action: {e}")
+                            else:
+                                try:
+                                    _send_json(conn, {"error": "unknown op"})
+                                except Exception:
+                                    pass
+                    except Exception as e:
+                        print(f"[{self.name}] unexpected error handling request: {e}")
+                        # Best effort: try to send a fold action so engine can continue
+                        try:
+                            _send_json(conn, _enum_to_wire(FoldAction()))
+                        except Exception:
+                            pass
+
+                if self.conn.poll():  # Check for incoming message
+                    msg = self.conn.recv()
+                    if msg == "terminate":
+                        self.running = False
+                        print(f"[{self.name}] Terminating bot process...")
                     else:
-                        #in-game state
-                        action = self.decide_action(game_state)
-                        self.conn.send(action)
+                        game_state = json.loads(msg)
+                        if (game_state.get("is_end_state", False)):
+                            #end game state
+                            self.end_game(msg)
 
-            time.sleep(0.01)  # Prevent CPU overuse
+                        else:
+                            #in-game state
+                            action = self.decide_action(game_state)
+                            self.conn.send(action)
+
+                time.sleep(0.01)  # Prevent CPU overuse
 
 
     def decide_action(self, game_state):
@@ -464,6 +589,8 @@ class PokerProbabilities():
 
 
 
+
+
 def test():
 
     probs = PokerProbabilities()
@@ -498,3 +625,12 @@ def test():
     
 
 
+if __name__ == "__main__":
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=6657)
+    ap.add_argument("--name", default="KnicksKnacker")
+    args = ap.parse_args()
+    PokerBot(name=args.name, host=args.host, port=args.port).run()
